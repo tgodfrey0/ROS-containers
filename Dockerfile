@@ -1,0 +1,63 @@
+ARG ROS_DISTRO
+
+########################################
+# Base image #
+########################################
+FROM osrf/ros:${ROS_DISTRO}-desktop AS base
+
+########################################
+# Environment variables #
+########################################
+ENV ROS_DISTRO=${ROS_DISTRO}
+ENV ROS_VERSION=2
+ENV ROS_PYTHON_VERSION=3
+ENV ROS_PACKAGE_PATH=/opt/ros/${ROS_DISTRO}/share
+ENV DISPLAY="unix:0"
+
+########################################
+# Set the shell #
+########################################
+SHELL ["/bin/bash", "-c"]
+
+########################################
+# Install packages #
+########################################
+RUN apt-get update -y
+RUN apt-get upgrade -y
+RUN apt-get install -y \
+  ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+  ros-${ROS_DISTRO}-realsense2-camera \
+  ros-${ROS_DISTRO}-rosidl-generator-dds-idl \
+  ros-${ROS_DISTRO}-ament-cmake \
+  ros-${ROS_DISTRO}-ament-cmake-ros \
+  ros-${ROS_DISTRO}-geometry-msgs \
+  ros-${ROS_DISTRO}-std-msgs \
+  ros-${ROS_DISTRO}-tf2-ros \
+  ros-${ROS_DISTRO}-rosidl-default-generators \
+  ros-${ROS_DISTRO}-ament-lint-common \
+  ros-${ROS_DISTRO}-rclcpp-action \
+  ros-${ROS_DISTRO}-xacro \
+  ros-${ROS_DISTRO}-launch-ros \
+  ros-${ROS_DISTRO}-pointcloud-to-laserscan \
+  ros-${ROS_DISTRO}-rqt-robot-steering \
+  libboost-all-dev \
+  libyaml-cpp-dev \
+  iproute2 \
+  iputils-ping \
+  nano \
+  ninja-build \
+  tmux
+
+########################################
+# Copy tmux configuration #
+########################################
+COPY tmux.conf /root/.tmux.conf
+
+########################################
+# Set entrypoint and default command #
+########################################
+COPY _ros_entrypoint_tmux.sh /ros_entrypoint_tmux.sh
+RUN chmod +x /ros_entrypoint_tmux.sh
+
+# Set the entrypoint
+CMD ["/ros_entrypoint_tmux.sh"]
