@@ -21,7 +21,7 @@ ENV DISPLAY="unix:0"
 SHELL ["/bin/bash", "-c"]
 
 ########################################
-# Install packages #
+# Install useful packages #
 ########################################
 RUN apt-get update -y
 RUN apt-get upgrade -y
@@ -48,11 +48,20 @@ RUN apt-get install -y \
   nano \
   ninja-build \
   tmux \
-  git \
+  git
+
+
+########################################
+# Install ROS2 Rust #
+########################################
+RUN apt-get install -y \
   libclang-dev \
   python3-pip \
-  python3-vcstool
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  python3-vcstool \
+  && rm -rf /var/lib/apt/lists/*
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain 1.75.0 -y
+ENV PATH=/root/.cargo/bin:$PATH
+RUN pip install --upgrade pytest
 RUN pip install git+https://github.com/colcon/colcon-cargo.git git+https://github.com/colcon/colcon-ros-cargo.git
 
 ########################################
