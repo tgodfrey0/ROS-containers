@@ -52,6 +52,7 @@ RUN apt-get install -y \
   libclang-dev \
   python3-pip \
   python3-vcstool
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 RUN pip install git+https://github.com/colcon/colcon-cargo.git git+https://github.com/colcon/colcon-ros-cargo.git
 
 ########################################
