@@ -47,7 +47,12 @@ RUN apt-get install -y \
   iputils-ping \
   nano \
   ninja-build \
-  tmux
+  tmux \
+  git \
+  libclang-dev \
+  python3-pip \
+  python3-vcstool
+RUN pip install git+https://github.com/colcon/colcon-cargo.git git+https://github.com/colcon/colcon-ros-cargo.git
 
 ########################################
 # Copy tmux configuration #
