@@ -1,4 +1,5 @@
 ARG ROS_DISTRO
+ARG DEBIAN_FRONTEND=noninteractive
 
 ########################################
 # Base image #
