@@ -35,8 +35,7 @@ else
     if [ ! "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
         echo "Container is not running! Starting..."
         docker start -i $CONTAINER_NAME
-    else
-        echo "Attaching to running container..."
-        docker attach $CONTAINER_NAME
     fi
+    echo "Attaching to running container..."
+    docker attach $CONTAINER_NAME
 fi

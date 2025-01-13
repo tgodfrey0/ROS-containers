@@ -48,7 +48,8 @@ RUN apt-get install -y \
   nano \
   ninja-build \
   tmux \
-  git
+  git \
+  xclip
 
 
 ########################################
