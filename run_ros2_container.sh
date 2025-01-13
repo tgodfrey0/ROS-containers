@@ -3,6 +3,15 @@
 # Check if ROS_DISTRO argument is provided
 if [ "$#" -lt 1 ]; then
     echo "Usage: $0 <ROS_DISTRO>"
+    if [ -f ./available_distros ]; then
+        echo "Available distros:"
+        while IFS= read -r line; do
+            echo "    - $line"
+        done < ./available_distros
+    else
+        echo "Error: no containers found."
+        echo "Please build the ROS container first."
+    fi
     exit 1
 fi
 
