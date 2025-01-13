@@ -13,7 +13,6 @@ ENV ROS_DISTRO=${ROS_DISTRO}
 ENV ROS_VERSION=2
 ENV ROS_PYTHON_VERSION=3
 ENV ROS_PACKAGE_PATH=/opt/ros/${ROS_DISTRO}/share
-ENV DISPLAY="unix:0"
 
 ########################################
 # Set the shell #
@@ -49,8 +48,17 @@ RUN apt-get install -y \
   ninja-build \
   tmux \
   git \
-  xclip
+  xclip \
+  xsel \
+  x11-apps \
+  xauth
 
+########################################
+# Setup for X11 forwarding #
+########################################
+RUN mkdir -p /root/.ssh
+RUN chmod 700 /root/.ssh
+RUN touch /root/.Xauthority
 
 ########################################
 # Install ROS2 Rust #

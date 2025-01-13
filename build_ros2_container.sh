@@ -37,6 +37,7 @@ if ! grep -q "^$ROS_DISTRO$" ./available_distros; then
     # Build the Docker image
     $build_command --squash \
                 --build-arg ROS_DISTRO=$ROS_DISTRO \
+                --env DISPLAY=$DISPLAY \
                 -t ros2:${ROS_DISTRO} \
                 "$@" .
 

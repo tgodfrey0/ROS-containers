@@ -19,6 +19,9 @@ ROS_DISTRO=$1
 CONTAINER_NAME="ros2_${ROS_DISTRO}"
 
 xhost +local:root
+XAUTH=$HOME/.Xauthority
+touch $XAUTH
+
 
 if [ ! "$(docker ps -aq -f name=$CONTAINER_NAME)" ]; then
     echo "Container does not exist! Creating..."
@@ -27,6 +30,7 @@ if [ ! "$(docker ps -aq -f name=$CONTAINER_NAME)" ]; then
                -v /dev:/dev \
                -v /home/$(whoami)/:/home/$(whoami)/ \
                -v /tmp/.X11-unix:/tmp/.X11-unix \
+               -v $HOME/.Xauthority:/root/.Xauthority \
                --network="host" \
                --privileged \
                -w /home/$(whoami) \
