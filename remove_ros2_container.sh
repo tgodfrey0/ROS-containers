@@ -18,9 +18,9 @@ is_podman() {
 
 # Set the build command based on whether it's Docker or Podman
 if is_podman; then
-    remove_command="podman rm"
+    cmd="podman"
 else
-    remove_command="docker remove"
+    cmd="docker"
 fi
 
 # Check if ROS_DISTRO argument is provided
@@ -35,7 +35,9 @@ shift  # Remove the first argument
 # If the distro container has already been built
 if grep -q "^$ROS_DISTRO$" ./available_distros; then
     # Build the Docker image
-    $remove_command ros2_${ROS_DISTRO}
+    $cmd rm ros2_${ROS_DISTRO}
+    $cmd rmi $($cmd images -f "tag=${ROS_DISTRO}" -q)
+    $cmd rmi $($cmd images -f "dangling=true" -q)
 
     # Remove the distro name
     sed -i "/^$ROS_DISTRO$/d" ./available_distros
