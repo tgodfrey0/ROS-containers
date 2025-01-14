@@ -1,10 +1,18 @@
+########################################
+# Distro argument #
+########################################
 ARG ROS_DISTRO
-ARG DEBIAN_FRONTEND=noninteractive
 
 ########################################
 # Base image #
 ########################################
 FROM osrf/ros:${ROS_DISTRO}-desktop AS base
+
+########################################
+# Other arguments #
+########################################
+ARG DEBIAN_FRONTEND=noninteractive
+ARG INTERFACE
 
 ########################################
 # Environment variables #
@@ -20,7 +28,7 @@ ENV ROS_PACKAGE_PATH=/opt/ros/${ROS_DISTRO}/share
 SHELL ["/bin/bash", "-c"]
 
 ########################################
-# Install useful packages #
+# Install packages #
 ########################################
 RUN apt-get update -y
 RUN apt-get upgrade -y
