@@ -12,7 +12,6 @@ FROM osrf/ros:${ROS_DISTRO}-desktop AS base
 # Other arguments #
 ########################################
 ARG DEBIAN_FRONTEND=noninteractive
-ARG INTERFACE
 
 ########################################
 # Environment variables #
@@ -34,7 +33,6 @@ RUN apt-get update -y
 RUN apt-get upgrade -y
 RUN apt-get install -y \
   ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
-  ros-${ROS_DISTRO}-realsense2-camera \
   ros-${ROS_DISTRO}-rosidl-generator-dds-idl \
   ros-${ROS_DISTRO}-ament-cmake \
   ros-${ROS_DISTRO}-ament-cmake-ros \
@@ -46,7 +44,6 @@ RUN apt-get install -y \
   ros-${ROS_DISTRO}-rclcpp-action \
   ros-${ROS_DISTRO}-xacro \
   ros-${ROS_DISTRO}-launch-ros \
-  ros-${ROS_DISTRO}-pointcloud-to-laserscan \
   ros-${ROS_DISTRO}-rqt-robot-steering \
   libboost-all-dev \
   libyaml-cpp-dev \
@@ -59,7 +56,8 @@ RUN apt-get install -y \
   xclip \
   xsel \
   x11-apps \
-  xauth
+  xauth \
+  python3-pytest
 
 ########################################
 # Setup for X11 forwarding #
@@ -74,11 +72,11 @@ RUN touch /root/.Xauthority
 RUN apt-get install -y \
   libclang-dev \
   python3-pip \
-  python3-vcstool \
-  && rm -rf /var/lib/apt/lists/*
+  python3-vcstool
+RUN rm -rf /var/lib/apt/lists/*
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain 1.75.0 -y
 ENV PATH=/root/.cargo/bin:$PATH
-RUN pip install --upgrade pytest
+# RUN pip install --upgrade pytest
 RUN pip install git+https://github.com/colcon/colcon-cargo.git git+https://github.com/colcon/colcon-ros-cargo.git
 
 ########################################
