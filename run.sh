@@ -34,6 +34,7 @@ fi
 
 ROS_DISTRO=$1
 CONTAINER_NAME="ros2_${ROS_DISTRO}"
+IMAGE_NAME="ros2:${ROS_DISTRO}"
 
 xhost +local:root
 XAUTH=$HOME/.Xauthority
@@ -51,7 +52,7 @@ if [ ! "$($CMD ps -aq -f name=$CONTAINER_NAME)" ]; then
               --network="host" \
               --privileged \
               -w /home/$(whoami) \
-              ros2:${ROS_DISTRO}
+              $IMAGE_NAME
 else
     if [ ! "$($CMD ps -q -f name=$CONTAINER_NAME)" ]; then
         echo "Container is not running! Starting..."

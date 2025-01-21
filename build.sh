@@ -24,6 +24,8 @@ if [ "$#" -lt 1 ]; then
 fi
 
 ROS_DISTRO=$1
+CONTAINER_NAME="ros2_${ROS_DISTRO}"
+IMAGE_NAME="ros2:${ROS_DISTRO}"
 
 # If the distro container has not already been built
 if ! grep -q "^$ROS_DISTRO$" ./available_distros; then
@@ -31,7 +33,7 @@ if ! grep -q "^$ROS_DISTRO$" ./available_distros; then
     if $CMD --squash \
             --build-arg ROS_DISTRO=$ROS_DISTRO \
             --env DISPLAY=$DISPLAY \
-            -t ros2:${ROS_DISTRO} \
+            -t ${IMAGE_NAME} \
             -f Containerfile .; then
         # Write the distro name to a file only if the build command succeeds
         echo "$ROS_DISTRO" >> ./available_distros

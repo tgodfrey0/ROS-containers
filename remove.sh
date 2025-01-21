@@ -25,12 +25,13 @@ fi
 
 ROS_DISTRO=$1
 CONTAINER_NAME="ros2_${ROS_DISTRO}"
+IMAGE_NAME="ros2:${ROS_DISTRO}"
 
 # Remove the container associated with the ROS distribution, if it exists
 $CMD rm -f $CONTAINER_NAME 2>/dev/null
 
 # Remove the image associated with the ROS distribution, if it exists
-$CMD rmi -f localhost/ros2:${ROS_DISTRO} 2>/dev/null
+$CMD rmi -f localhost/${IMAGE_NAME} 2>/dev/null
 
 # Clean up dangling images (images not tagged and not referenced by any container)
 dangling_images=$($CMD images -f "dangling=true" -q)
