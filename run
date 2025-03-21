@@ -13,7 +13,7 @@ is_podman() {
 
 if is_podman; then
     CMD="podman"
-elsed
+else
     CMD="docker"
 fi
 

@@ -80,6 +80,11 @@ ENV PATH=/root/.cargo/bin:$PATH
 RUN pip install git+https://github.com/colcon/colcon-cargo.git git+https://github.com/colcon/colcon-ros-cargo.git
 
 ########################################
+# Install Pixi #
+########################################
+RUN curl -fsSL https://pixi.sh/install.sh | bash
+
+########################################
 # Copy tmux configuration #
 ########################################
 COPY tmux.conf /root/.tmux.conf
