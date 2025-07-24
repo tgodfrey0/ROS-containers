@@ -52,6 +52,7 @@ if [ ! "$($CMD ps -aq -f name=$CONTAINER_NAME)" ]; then
               --network="host" \
               --privileged \
               -w /home/$(whoami) \
+              --cap-add CAP_NET_ADMIN \
               $IMAGE_NAME
 else
     if [ ! "$($CMD ps -q -f name=$CONTAINER_NAME)" ]; then

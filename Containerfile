@@ -56,6 +56,7 @@ RUN case "${ROS_DISTRO}" in \
             apt-get install -y ros-${ROS_DISTRO}-ros-gz \
             ;; \
     esac
+ENV IGN_IP=127.0.0.1
 
 RUN apt-get install -y \
   ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
