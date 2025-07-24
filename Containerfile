@@ -31,6 +31,32 @@ SHELL ["/bin/bash", "-c"]
 ########################################
 RUN apt-get update -y
 RUN apt-get upgrade -y
+
+RUN curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
+RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
+RUN apt-get update -y
+RUN case "${ROS_DISTRO}" in \
+        "humble") \
+            apt-get install -y gz-fortress ros-${ROS_DISTRO}-ros-gz \
+            ;; \
+        "iron") \
+            apt-get install -y gz-fortress ros-${ROS_DISTRO}-ros-gz \
+            ;; \
+        "jazzy") \
+            apt-get install -y gz-harmonic ros-${ROS_DISTRO}-ros-gz \
+            ;; \
+        "kilted") \
+            apt-get install -y gz-ionic ros-${ROS_DISTRO}-ros-gz \
+            ;; \
+        "rolling") \
+            apt-get install -y gz-ionic ros-${ROS_DISTRO}-ros-gz \
+            ;; \
+        *) \
+            echo "Warning: Unspecified or unsupported ROS_DISTRO for Gazebo Sim. Attempting to install ros-${ROS_DISTRO}-ros-gz, but specific Gazebo Sim version might be missing." && \
+            apt-get install -y ros-${ROS_DISTRO}-ros-gz \
+            ;; \
+    esac
+
 RUN apt-get install -y \
   ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
   ros-${ROS_DISTRO}-rosidl-generator-dds-idl \
