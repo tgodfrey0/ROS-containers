@@ -45,6 +45,7 @@ RUN apt-get install -y \
   ros-${ROS_DISTRO}-xacro \
   ros-${ROS_DISTRO}-launch-ros \
   ros-${ROS_DISTRO}-rqt-robot-steering \
+  ros-${ROS_DISTRO}-ros-gz \
   libboost-all-dev \
   libyaml-cpp-dev \
   iproute2 \
