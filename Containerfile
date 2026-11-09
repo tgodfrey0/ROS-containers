@@ -111,6 +111,15 @@ RUN pip install git+https://github.com/colcon/colcon-cargo.git git+https://githu
 RUN curl -fsSL https://pixi.sh/install.sh | bash
 
 ########################################
+# ROS 2 environment + tab completion #
+########################################
+# tmux panes start a fresh bash that only reads .bashrc. Sourcing setup.bash
+# there gives every shell the full ROS environment and registers the
+# argcomplete-based `ros2` completion (package names for `ros2 run` /
+# `ros2 launch`, verbs, options, launch files).
+RUN printf '\n# ROS 2 environment and tab completion in every interactive shell\nif [ -n "${ROS_DISTRO:-}" ] && [ -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]; then\n    . "/opt/ros/${ROS_DISTRO}/setup.bash"\nfi\n' >> /root/.bashrc
+
+########################################
 # Copy tmux configuration #
 ########################################
 COPY tmux.conf /root/.tmux.conf

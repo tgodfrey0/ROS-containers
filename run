@@ -1,64 +1,137 @@
 #!/bin/bash
+# Start (or attach to) a ROS 2 container: ./run <distro> [-- command...]
+source "$(dirname -- "${BASH_SOURCE[0]}")/lib.sh"
 
-is_podman() {
-    if command -v podman &> /dev/null; then
-        return 0
-    elif command -v docker &> /dev/null; then
-        return 1
-    else
-        echo "Neither Podman nor Docker is installed"
-        exit 1
-    fi
+usage() {
+    cat <<EOF
+Usage: ./run [OPTIONS] <ROS2_DISTRO> [-- COMMAND [ARG...]]
+
+Start a ROS 2 container as defined in ./compose.yaml (building the image
+automatically the first time) and attach to its tmux session.
+
+Options:
+  --build     Rebuild the image before starting
+  -h, --help  Show this help
+
+Examples:
+  ./run jazzy                    # tmux inside a jazzy container (rviz/rqt GUIs work)
+  ./run humble                   # any built or unbuilt distro, same command
+  ./run --build jazzy            # rebuild the image, then start
+  ./run jazzy -- ros2 topic list # run a single command in the container
+  ./run jazzy -- bash            # plain shell inside the container
+
+Detach from a running container with Ctrl-g (it keeps running in the
+background; './run <distro>' attaches again).
+
+EOF
+    print_status
 }
 
-if is_podman; then
-    CMD="podman"
-else
-    CMD="docker"
-fi
+REBUILD=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --build)
+            REBUILD=1
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            die "unknown option '$1' (see ./run --help)"
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
-# Check if ROS_DISTRO argument is provided
-if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <ROS_DISTRO>"
-    if [ -f ./available_distros ]; then
-        echo "Available distros:"
-        while IFS= read -r line; do
-            echo "    - $line"
-        done < ./available_distros
-    else
-        echo "Error: no containers found."
-        echo "Please build the ROS container first."
-    fi
+if [[ $# -lt 1 ]]; then
+    usage >&2
     exit 1
 fi
 
-ROS_DISTRO=$1
-CONTAINER_NAME="ros2_${ROS_DISTRO}"
-IMAGE_NAME="ros2:${ROS_DISTRO}"
+DISTRO="$1"
+shift
+if [[ "${1:-}" == "--" ]]; then
+    shift
+fi
 
-xhost +local:root
-XAUTH=$HOME/.Xauthority
-touch $XAUTH
+require_distro "$DISTRO"
+export ROS_DISTRO="$DISTRO"
+refresh_distros_file
 
+x11_prepare
 
-if [ ! "$($CMD ps -aq -f name=$CONTAINER_NAME)" ]; then
-    echo "Container does not exist! Creating..."
-    $CMD run  -it \
-              --name $CONTAINER_NAME \
-              -v /dev:/dev \
-              -v /home/$(whoami)/:/home/$(whoami)/ \
-              -v /tmp/.X11-unix:/tmp/.X11-unix \
-              -v $HOME/.Xauthority:/root/.Xauthority \
-              --network="host" \
-              --privileged \
-              -w /home/$(whoami) \
-              --cap-add CAP_NET_ADMIN \
-              $IMAGE_NAME
+# Containers from the pre-compose version of these scripts have no compose
+# labels; remove them so `compose up` can recreate them cleanly.
+if container_exists "$DISTRO" && ! container_is_compose_managed "$DISTRO"; then
+    info "Replacing container '$(container_name "$DISTRO")' created by the old setup"
+    "$ENGINE" rm -f "$(container_name "$DISTRO")" >/dev/null 2>&1 || true
+fi
+
+if ! image_exists "$DISTRO"; then
+    info "Image $(image_name "$DISTRO") does not exist yet - building it now (first build takes a while)"
+elif (( REBUILD )); then
+    info "Rebuilding $(image_name "$DISTRO")"
+fi
+
+UP_ARGS=(-d)
+if (( REBUILD )); then
+    # A rebuild produces a new image, so the container must be recreated
+    # from it (this also applies any compose.yaml changes).
+    UP_ARGS+=(--build --force-recreate)
 else
-    if [ ! "$($CMD ps -q -f name=$CONTAINER_NAME)" ]; then
-        echo "Container is not running! Starting..."
-        $CMD start -i $CONTAINER_NAME
+    # Never recreate on a plain start. podman-compose embeds the
+    # interpolated config (including DISPLAY/TERM/XAUTHORITY from your
+    # shell) in a hash, and recreating on any mismatch would reset the
+    # container to the pristine image - losing everything installed with
+    # apt/pip inside. Recreation only happens with --build or ./remove.
+    UP_ARGS+=(--no-recreate)
+fi
+info "Starting container $(container_name "$DISTRO")"
+
+# While an image is being built we show compose output live; for a plain
+# start we keep the output clean and only show it if something goes wrong.
+if image_exists "$DISTRO" && (( ! REBUILD )); then
+    if ! UP_OUTPUT=$(compose up "${UP_ARGS[@]}" ros2 2>&1); then
+        printf '%s\n' "$UP_OUTPUT" >&2
+        die "failed to start $(container_name "$DISTRO")"
     fi
-    echo "Attaching to running container..."
-    $CMD attach $CONTAINER_NAME
+else
+    compose up "${UP_ARGS[@]}" ros2 || die "failed to start $(container_name "$DISTRO")"
+fi
+refresh_distros_file
+
+# `compose up -d` can return a moment before the container reaches the
+# running state, and `podman exec`/`attach` refuse to work on one that
+# isn't running yet - so wait briefly for it.
+for _ in {1..50}; do
+    container_running "$DISTRO" && break
+    sleep 0.1
+done
+container_running "$DISTRO" || die "container $(container_name "$DISTRO") did not reach the running state"
+
+if [[ $# -gt 0 ]]; then
+    # One-off command: ./run jazzy -- ros2 topic list
+    TTY_ARGS=()
+    if [[ -t 0 && -t 1 ]]; then
+        TTY_ARGS=(-t)
+    fi
+    exec "$ENGINE" exec ${TTY_ARGS[@]+"${TTY_ARGS[@]}"} "$(container_name "$DISTRO")" "$@"
+fi
+
+if [[ -t 0 && -t 1 ]]; then
+    info "Attached to $(container_name "$DISTRO") - detach with Ctrl-g"
+    # Ctrl-g instead of the default Ctrl-p Ctrl-q: Ctrl-Q is a terminal
+    # flow-control character and often gets swallowed before podman sees it.
+    exec "$ENGINE" attach --detach-keys=ctrl-g "$(container_name "$DISTRO")"
+else
+    warn "stdin is not a terminal - following the container log instead (Ctrl-c to stop)"
+    exec "$ENGINE" logs -f "$(container_name "$DISTRO")"
 fi

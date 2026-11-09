@@ -1,45 +1,78 @@
 #!/bin/bash
+# Remove ROS 2 container(s) and image(s): ./remove <distro> | --all
+source "$(dirname -- "${BASH_SOURCE[0]}")/lib.sh"
 
-is_podman() {
-    if command -v podman &> /dev/null; then
-        return 0
-    elif command -v docker &> /dev/null; then
-        return 1
-    else
-        echo "Neither Podman nor Docker is installed"
-        exit 1
-    fi
+usage() {
+    cat <<EOF
+Usage: ./remove [OPTIONS] <ROS2_DISTRO> [ROS2_DISTRO...]
+
+Stop and delete the container and image for the given distro(s).
+
+Options:
+  --all, -a   Remove every distro that has been built
+  -h, --help  Show this help
+
+Examples:
+  ./remove jazzy
+  ./remove --all
+
+EOF
+    print_status
 }
 
-if is_podman; then
-    CMD="podman"
-else
-    CMD="docker"
-fi
+DISTROS=()
+ALL=0
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --all|-a)
+            ALL=1
+            ;;
+        -*)
+            die "unknown option '$arg' (see ./remove --help)"
+            ;;
+        *)
+            DISTROS+=("$arg")
+            ;;
+    esac
+done
 
-# Check if ROS_DISTRO argument is provided
-if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <ROS_DISTRO>"
+if (( ALL )); then
+    mapfile -t DISTROS < <(built_distros)
+    if [[ ${#DISTROS[@]} -eq 0 ]]; then
+        info "nothing to remove: no ros2 images are built"
+        exit 0
+    fi
+elif [[ ${#DISTROS[@]} -eq 0 ]]; then
+    usage >&2
     exit 1
 fi
 
-ROS_DISTRO=$1
-CONTAINER_NAME="ros2_${ROS_DISTRO}"
-IMAGE_NAME="ros2:${ROS_DISTRO}"
+for DISTRO in "${DISTROS[@]}"; do
+    require_distro "$DISTRO"
+    export ROS_DISTRO="$DISTRO"
 
-# Remove the container associated with the ROS distribution, if it exists
-$CMD rm -f $CONTAINER_NAME 2>/dev/null
+    if container_exists "$DISTRO"; then
+        info "Stopping and removing container $(container_name "$DISTRO")"
+        # `compose down` also catches containers created by the old scripts.
+        if ! DOWN_OUTPUT=$(compose down --rmi all ros2 2>&1); then
+            printf '%s\n' "$DOWN_OUTPUT" >&2
+            warn "compose down reported problems for $DISTRO; falling back to direct removal"
+        fi
+    fi
 
-# Remove the image associated with the ROS distribution, if it exists
-$CMD rmi -f localhost/${IMAGE_NAME} 2>/dev/null
+    # Fallbacks: image/container not created through compose.
+    if image_exists "$DISTRO"; then
+        info "Removing image $(image_name "$DISTRO")"
+        "$ENGINE" rmi -f "$(image_name "$DISTRO")" >/dev/null 2>&1 || true
+    fi
+    if container_exists "$DISTRO"; then
+        "$ENGINE" rm -f "$(container_name "$DISTRO")" >/dev/null 2>&1 || true
+    fi
+done
 
-# Clean up dangling images (images not tagged and not referenced by any container)
-dangling_images=$($CMD images -f "dangling=true" -q)
-if [ ! -z "$dangling_images" ]; then
-    $CMD rmi -f $dangling_images  # Force remove dangling images
-fi
-
-# Remove the distro name from available_distros file, if it exists
-sed -i "/^$ROS_DISTRO$/d" ./available_distros
-
-echo "Cleanup completed for ROS distribution: $ROS_DISTRO."
+refresh_distros_file
+info "Cleanup completed for: ${DISTROS[*]}"

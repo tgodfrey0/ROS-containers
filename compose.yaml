@@ -1,0 +1,62 @@
+# ROS 2 containers, defined declaratively with Compose.
+#
+# The single service below is parameterised by ROS_DISTRO, so this one file
+# builds and runs any distro:
+#
+#     ROS_DISTRO=jazzy podman compose up -d     # what ./run jazzy does for you
+#
+# The ./run and ./remove scripts are thin wrappers around
+# `podman compose` (falls back to `docker compose`) and set ROS_DISTRO,
+# DISPLAY and XAUTHORITY for you.
+#
+# Design notes:
+#   * network_mode: host  -> ROS 2 DDS discovery works out of the box and the
+#                            container can talk to physical robots on the LAN.
+#   * /tmp/.X11-unix and Xauthority volumes -> GUI forwarding (rviz, rqt, ...),
+#                            enabled by `xhost +local:root` in ./run.
+#   * privileged + CAP_NET_ADMIN + /dev -> serial ports, CAN, network setup,
+#                            hardware access without extra fuss.
+
+name: ros2
+
+services:
+  ros2:
+    # `:?` gives a clear error if ROS_DISTRO was not set (i.e. someone ran
+    # `podman compose` directly instead of using the scripts).
+    image: ros2:${ROS_DISTRO:?ROS_DISTRO is not set - run ./run <distro> or export ROS_DISTRO=<distro>}
+    build:
+      context: .
+      dockerfile: Containerfile
+      args:
+        ROS_DISTRO: ${ROS_DISTRO:?ROS_DISTRO is not set - run ./run <distro> or export ROS_DISTRO=<distro>}
+    container_name: ros2_${ROS_DISTRO:?ROS_DISTRO is not set - run ./run <distro> or export ROS_DISTRO=<distro>}
+
+    # Interactive by default: the container's entrypoint starts tmux.
+    tty: true
+    stdin_open: true
+
+    # Talk to physical robots (and DDS peers) on the host network.
+    network_mode: host
+
+    # Hardware access: /dev, serial/CAN adapters, network configuration.
+    privileged: true
+    cap_add:
+      - CAP_NET_ADMIN
+
+    working_dir: ${HOME}
+
+    environment:
+      DISPLAY: ${DISPLAY:-}
+      XAUTHORITY: /root/.Xauthority
+      TERM: ${TERM:-xterm-256color}
+      ROS_DISTRO: ${ROS_DISTRO}
+      IGN_IP: 127.0.0.1
+
+    volumes:
+      # Host devices (serial ports, USB, CAN, ...)
+      - /dev:/dev
+      # Work on your host files directly (same path inside the container)
+      - ${HOME}:${HOME}
+      # GUI forwarding (X11)
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ${XAUTHORITY}:/root/.Xauthority:ro
