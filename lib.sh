@@ -100,6 +100,18 @@ container_is_compose_managed() {
     [[ "$labels" == *compose.project* ]]
 }
 
+# The command a container/image runs as PID 1, as JSON (e.g.
+# `["/ros_entrypoint.sh"]`). Used to recognise containers and images built
+# before the entrypoint was made mode-neutral: those have tmux as PID 1, so
+# `./run --no-tmux` cannot work on them until they are recreated.
+container_cmd() {
+    "$ENGINE" inspect -f '{{json .Config.Cmd}}' "$(container_name "$1")" 2>/dev/null || echo null
+}
+
+image_cmd() {
+    "$ENGINE" image inspect -f '{{json .Config.Cmd}}' "$(image_name "$1")" 2>/dev/null || echo null
+}
+
 # Distros that have a local ros2:<distro> image, one per line, sorted.
 built_distros() {
     local images

@@ -31,7 +31,8 @@ services:
         ROS_DISTRO: ${ROS_DISTRO:?ROS_DISTRO is not set - run ./run <distro> or export ROS_DISTRO=<distro>}
     container_name: ros2_${ROS_DISTRO:?ROS_DISTRO is not set - run ./run <distro> or export ROS_DISTRO=<distro>}
 
-    # Interactive by default: the container's entrypoint starts tmux.
+    # The entrypoint only keeps the container alive; ./run attaches to it
+    # with tmux (default), a plain bash shell (--no-tmux) or a command.
     tty: true
     stdin_open: true
 

@@ -30,6 +30,10 @@ container and drops you into a tmux session inside it, with:
   ports, CAN adapters and network configuration.
 - **Your home directory** mounted at the same path, as the working directory.
 
+Prefer no tmux? `./run --no-tmux jazzy` gives you a plain bash shell in the
+container instead (ROS environment included), and switching between the two
+never rebuilds or recreates the container.
+
 `./run humble`, `./run iron`, ... work the same way; the image is built
 automatically the first time you ask for a distro.
 
@@ -38,6 +42,7 @@ automatically the first time you ask for a distro.
 | Command | What it does |
 |---|---|
 | `./run <distro>` | Build if missing, start (or attach to) the container, attach tmux |
+| `./run --no-tmux <distro>` | Same, but attach a plain bash shell instead of tmux |
 | `./run --build <distro>` | Rebuild the image and recreate the container (use after editing `Containerfile`) |
 | `./run <distro> -- <cmd>` | Run a single command in the container (e.g. `./run jazzy -- ros2 topic list`) |
 | `./remove <distro>` | Stop and delete the container and image |
@@ -46,8 +51,9 @@ automatically the first time you ask for a distro.
 
 Detach from a running container with `Ctrl-g` (instead of the usual
 `Ctrl-p Ctrl-q`, because Ctrl-Q often gets eaten by terminal flow control);
-it keeps running in the background and `./run <distro>` attaches again. Stop
-it for good with `./remove <distro>`.
+it keeps running in the background and `./run <distro>` attaches again. In
+`--no-tmux` mode, exiting the shell (`Ctrl-D`) does the same: the container
+stays up. Stop it for good with `./remove <distro>`.
 
 ## Supported distros
 
@@ -89,15 +95,35 @@ The scripts are thin wrappers: they validate the distro, export
 `ROS_DISTRO`/`XAUTHORITY`, run `xhost +local:root` (so the container may
 connect to your X server), and then call `podman compose`.
 
+The container's PID 1 (`/ros_entrypoint.sh`, see [`Containerfile`](./Containerfile))
+only keeps the container alive — tmux is **not** started at container start.
+`./run` picks what to attach afterwards, through `podman exec`:
+
+- `./run <distro>` → `tmux new-session -A -s ros2_session` (creates the
+  session on first use, re-attaches later)
+- `./run --no-tmux <distro>` → plain `bash`
+- `./run <distro> -- <cmd>` → the command itself, with
+  `/opt/ros/$ROS_DISTRO/setup.bash` sourced first (the container's
+  configured environment does not put `ros2` on `PATH`)
+
+So tmux vs. plain shell is a per-run choice: nothing about the container
+needs rebuilding or recreating to switch. Only `./remove` / `./run --build`
+recreate it, because they rebuild the image.
+
 You can drive compose yourself just as well:
 
 ```bash
 export ROS_DISTRO=jazzy
 podman compose build        # build the image
 podman compose up -d        # start (builds automatically if the image is missing)
-podman attach ros2_jazzy    # attach
+podman exec -it ros2_jazzy bash                # plain shell inside
+podman exec -it ros2_jazzy tmux attach -t ros2_session   # or the tmux session
 podman compose down --rmi all   # remove container + image
 ```
+
+The container itself only stays alive (its PID 1 is `/ros_entrypoint.sh`);
+everything else — tmux, a shell, a command — is `podman exec`'d into it by
+`./run`, which is why `--no-tmux` costs nothing.
 
 ### Notes
 
@@ -112,6 +138,9 @@ podman compose down --rmi all   # remove container + image
   container).
 - After changing `Containerfile`, run `./run --build <distro>` to pick up
   the changes.
+- tmux vs. a plain shell is decided by `./run` when it attaches, never by
+  the container, so `./run <distro>` and `./run --no-tmux <distro>` can be
+  used interchangeably on the same container without any rebuild.
 - The scripts pass `--podman-build-args="--format docker"` to podman-compose:
   podman's default OCI format ignores the `SHELL` instruction in the
   Containerfile and produces images that docker cannot load.

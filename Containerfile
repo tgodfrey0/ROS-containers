@@ -127,8 +127,12 @@ COPY tmux.conf /root/.tmux.conf
 ########################################
 # Set entrypoint and default command #
 ########################################
-COPY _ros_entrypoint_tmux.sh /ros_entrypoint_tmux.sh
-RUN chmod +x /ros_entrypoint_tmux.sh
+# The entrypoint only keeps the container alive. What actually runs inside
+# it (tmux, a plain bash shell or a one-off command) is chosen by ./run
+# through `podman exec`, so switching modes never needs a rebuild or
+# recreate.
+COPY _ros_entrypoint.sh /ros_entrypoint.sh
+RUN chmod +x /ros_entrypoint.sh
 
 # Set the entrypoint
-CMD ["/ros_entrypoint_tmux.sh"]
+CMD ["/ros_entrypoint.sh"]

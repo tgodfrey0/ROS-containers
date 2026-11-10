@@ -7,27 +7,35 @@ usage() {
 Usage: ./run [OPTIONS] <ROS2_DISTRO> [-- COMMAND [ARG...]]
 
 Start a ROS 2 container as defined in ./compose.yaml (building the image
-automatically the first time) and attach to its tmux session.
+automatically the first time) and attach a shell to it: a tmux session by
+default, a plain bash shell with --no-tmux.
 
 Options:
-  --build     Rebuild the image before starting
-  -h, --help  Show this help
+  --build      Rebuild the image before starting
+  --no-tmux    Attach a plain bash shell instead of a tmux session
+  -h, --help   Show this help
 
 Examples:
   ./run jazzy                    # tmux inside a jazzy container (rviz/rqt GUIs work)
+  ./run --no-tmux jazzy          # plain bash shell, no tmux
   ./run humble                   # any built or unbuilt distro, same command
   ./run --build jazzy            # rebuild the image, then start
   ./run jazzy -- ros2 topic list # run a single command in the container
   ./run jazzy -- bash            # plain shell inside the container
 
 Detach from a running container with Ctrl-g (it keeps running in the
-background; './run <distro>' attaches again).
+background; './run <distro>' attaches again). In --no-tmux mode just exit
+the shell (Ctrl-D); the container keeps running too.
+
+Choosing between tmux and --no-tmux never rebuilds or recreates the
+container - only the image build itself (--build or a first run) does.
 
 EOF
     print_status
 }
 
 REBUILD=0
+NO_TMUX=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
@@ -36,6 +44,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --build)
             REBUILD=1
+            shift
+            ;;
+        --no-tmux)
+            NO_TMUX=1
             shift
             ;;
         --)
@@ -73,6 +85,18 @@ x11_prepare
 if container_exists "$DISTRO" && ! container_is_compose_managed "$DISTRO"; then
     info "Replacing container '$(container_name "$DISTRO")' created by the old setup"
     "$ENGINE" rm -f "$(container_name "$DISTRO")" >/dev/null 2>&1 || true
+fi
+
+# Images and containers from before the entrypoint was made mode-neutral
+# have tmux as PID 1, so tmux would be running no matter what ./run attaches
+# to. They can only be fixed once - and that does need a rebuild.
+if image_exists "$DISTRO" && [[ "$(image_cmd "$DISTRO")" == *ros_entrypoint_tmux.sh* ]]; then
+    warn "image $(image_name "$DISTRO") still runs tmux as PID 1"
+    warn "run './run --build $DISTRO' once to pick up the mode-neutral entrypoint"
+fi
+if container_exists "$DISTRO" && [[ "$(container_cmd "$DISTRO")" == *ros_entrypoint_tmux.sh* ]]; then
+    warn "container $(container_name "$DISTRO") runs tmux as PID 1 (created from an old image)"
+    warn "run './remove $DISTRO' once to recreate it without tmux"
 fi
 
 if ! image_exists "$DISTRO"; then
@@ -117,21 +141,47 @@ for _ in {1..50}; do
 done
 container_running "$DISTRO" || die "container $(container_name "$DISTRO") did not reach the running state"
 
-if [[ $# -gt 0 ]]; then
-    # One-off command: ./run jazzy -- ros2 topic list
-    TTY_ARGS=()
-    if [[ -t 0 && -t 1 ]]; then
-        TTY_ARGS=(-t)
+# Everything we run inside the container goes through this: `podman exec`
+# only passes the container's configured environment (no /opt/ros/<distro>
+# on PATH), so the ROS setup has to be sourced explicitly for commands like
+# `ros2 topic list` to be found. An interactive shell does not need this -
+# /root/.bashrc sources setup.bash for it.
+in_container() {
+    local tty=()
+    if [[ -t 0 ]]; then
+        tty+=(-i)
     fi
-    exec "$ENGINE" exec ${TTY_ARGS[@]+"${TTY_ARGS[@]}"} "$(container_name "$DISTRO")" "$@"
+    if [[ -t 0 && -t 1 ]]; then
+        tty+=(-t)
+    fi
+    "$ENGINE" exec ${tty[@]+"${tty[@]}"} "$(container_name "$DISTRO")" \
+        bash -c 'if [ -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]; then . "/opt/ros/${ROS_DISTRO}/setup.bash"; fi; exec "$@"' _ "$@"
+}
+
+if [[ $# -gt 0 ]]; then
+    # One-off command: ./run jazzy -- ros2 topic list. It runs to completion
+    # and stops here - without this explicit exit the script would fall
+    # through to the attach below and launch tmux after the command returned.
+    in_container "$@"
+    exit 0
 fi
 
-if [[ -t 0 && -t 1 ]]; then
-    info "Attached to $(container_name "$DISTRO") - detach with Ctrl-g"
-    # Ctrl-g instead of the default Ctrl-p Ctrl-q: Ctrl-Q is a terminal
-    # flow-control character and often gets swallowed before podman sees it.
-    exec "$ENGINE" attach --detach-keys=ctrl-g "$(container_name "$DISTRO")"
-else
-    warn "stdin is not a terminal - following the container log instead (Ctrl-c to stop)"
-    exec "$ENGINE" logs -f "$(container_name "$DISTRO")"
+if ! [[ -t 0 && -t 1 ]]; then
+    warn "stdin is not a terminal - not attaching to $(container_name "$DISTRO")"
+    info "Get a shell with: $ENGINE exec -it $(container_name "$DISTRO") bash"
+    exit 0
 fi
+
+if (( NO_TMUX )); then
+    info "Attached to $(container_name "$DISTRO") - plain shell, no tmux (exit with Ctrl-D)"
+    exec "$ENGINE" exec -it "$(container_name "$DISTRO")" bash
+fi
+
+info "Attached to $(container_name "$DISTRO") - detach with Ctrl-g (tmux keeps running)"
+# Ctrl-g instead of tmux's default Ctrl-b d: it is the detach key this
+# script used to bind with `podman attach --detach-keys`, and Ctrl-Q is a
+# terminal flow-control character that often gets swallowed before podman
+# sees it (see tmux.conf for the binding). The session survives detaching,
+# so the next './run <distro>' re-attaches to it.
+exec "$ENGINE" exec -it "$(container_name "$DISTRO")" \
+    bash -c 'if [ -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]; then . "/opt/ros/${ROS_DISTRO}/setup.bash"; fi; exec tmux new-session -A -s ros2_session'
