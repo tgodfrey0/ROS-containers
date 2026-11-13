@@ -95,6 +95,13 @@ The scripts are thin wrappers: they validate the distro, export
 `ROS_DISTRO`/`XAUTHORITY`, run `xhost +local:root` (so the container may
 connect to your X server), and then call `podman compose`.
 
+`XAUTHORITY` is not passed through verbatim: login managers (SDDM) point it
+at `/tmp/xauth_XXXXXX`, which is wiped at boot. Mounting that path would bake
+it into the container and make it impossible to start after a reboot
+(`crun: cannot stat ...`). Instead `lib.sh` keeps a stable copy at
+`~/.cache/ros2-containers/Xauthority` and refreshes it on every run, so the
+container survives reboots without being recreated.
+
 The container's PID 1 (`/ros_entrypoint.sh`, see [`Containerfile`](./Containerfile))
 only keeps the container alive — tmux is **not** started at container start.
 `./run` picks what to attach afterwards, through `podman exec`:

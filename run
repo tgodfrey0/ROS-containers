@@ -87,6 +87,15 @@ if container_exists "$DISTRO" && ! container_is_compose_managed "$DISTRO"; then
     "$ENGINE" rm -f "$(container_name "$DISTRO")" >/dev/null 2>&1 || true
 fi
 
+# A container whose Xauthority bind source was deleted (old /tmp/xauth_* path,
+# wiped at boot) can never start again - podman fails before the entrypoint
+# runs. Recreate it instead of failing every time.
+if container_exists "$DISTRO" && xauthority_mount_missing "$DISTRO"; then
+    warn "container $(container_name "$DISTRO") points at a deleted Xauthority file"
+    warn "recreating it (nothing inside it can be kept - it cannot start)"
+    "$ENGINE" rm -f "$(container_name "$DISTRO")" >/dev/null 2>&1 || true
+fi
+
 # Images and containers from before the entrypoint was made mode-neutral
 # have tmux as PID 1, so tmux would be running no matter what ./run attaches
 # to. They can only be fixed once - and that does need a rebuild.

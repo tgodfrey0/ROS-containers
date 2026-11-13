@@ -20,11 +20,43 @@ info() { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
 
 # compose.yaml always needs an Xauthority path, even for build/remove.
-# Prefer a real cookie file: $XAUTHORITY sometimes points at a stale or
-# podman-generated copy in /tmp, and ~/.Xauthority may be empty.
-if [[ -z "${XAUTHORITY:-}" || ! -f "$XAUTHORITY" ]]; then
-    export XAUTHORITY="$HOME/.Xauthority"
-fi
+#
+# $XAUTHORITY is usually a login-manager temp file (SDDM: /tmp/xauth_XXXXXX),
+# and /tmp/xauth_* is wiped at boot (see /usr/lib/tmpfiles.d/sddm.conf).
+# Mounting that path directly bakes it into the container's configuration, so
+# after a reboot podman can no longer start the container:
+#
+#     crun: cannot stat `/tmp/xauth_XXXXXX`: No such file or directory
+#
+# Keep a stable copy under $HOME (which is already mounted into the container)
+# and point compose at that instead. The copy is refreshed on every run, so a
+# long-running container keeps working across host logins too.
+STABLE_XAUTHORITY="$HOME/.cache/ros2-containers/Xauthority"
+
+prepare_xauthority() {
+    local source="${XAUTHORITY:-}"
+
+    mkdir -p -- "$(dirname -- "$STABLE_XAUTHORITY")" 2>/dev/null || true
+    if [[ -n "$source" && -f "$source" && "$source" != "$STABLE_XAUTHORITY" ]]; then
+        # In-place write (not `cp`): keeps the inode, so the bind mount of a
+        # container that is already running sees the refreshed cookie.
+        cat -- "$source" >"$STABLE_XAUTHORITY" 2>/dev/null || true
+    fi
+    # Always provide a mount source. Without a cookie, GUI access still works
+    # through `xhost +local:root` in x11_prepare.
+    touch -- "$STABLE_XAUTHORITY" 2>/dev/null || true
+
+    if [[ -f "$STABLE_XAUTHORITY" ]]; then
+        export XAUTHORITY="$STABLE_XAUTHORITY"
+    elif [[ -n "$source" && -f "$source" ]]; then
+        # Last resort if ~/.cache is not writable: use the original cookie.
+        export XAUTHORITY="$source"
+    else
+        export XAUTHORITY="$HOME/.Xauthority"
+    fi
+}
+
+prepare_xauthority
 
 ########################################
 # Container engine
@@ -98,6 +130,18 @@ container_is_compose_managed() {
     local labels
     labels=$("$ENGINE" inspect -f '{{json .Config.Labels}}' "$(container_name "$1")" 2>/dev/null || echo null)
     [[ "$labels" == *compose.project* ]]
+}
+
+# Containers created before the stable Xauthority copy above baked a
+# /tmp/xauth_* path into their mounts. Once that file is gone at reboot, the
+# container cannot be started at all (podman fails before the entrypoint runs),
+# so it can only be recreated.
+xauthority_mount_missing() {
+    local source
+    source=$("$ENGINE" inspect -f \
+        '{{range .Mounts}}{{if eq .Destination "/root/.Xauthority"}}{{.Source}}{{end}}{{end}}' \
+        "$(container_name "$1")" 2>/dev/null || true)
+    [[ -n "$source" && ! -e "$source" ]]
 }
 
 # The command a container/image runs as PID 1, as JSON (e.g.

@@ -13,7 +13,11 @@
 #   * network_mode: host  -> ROS 2 DDS discovery works out of the box and the
 #                            container can talk to physical robots on the LAN.
 #   * /tmp/.X11-unix and Xauthority volumes -> GUI forwarding (rviz, rqt, ...),
-#                            enabled by `xhost +local:root` in ./run.
+#                            enabled by `xhost +local:root` in ./run. XAUTHORITY
+#                            points at ~/.cache/ros2-containers/Xauthority (a
+#                            stable copy made by lib.sh), never at a login
+#                            manager's /tmp/xauth_* file - those are deleted at
+#                            boot and would make the container unstartable.
 #   * privileged + CAP_NET_ADMIN + /dev -> serial ports, CAN, network setup,
 #                            hardware access without extra fuss.
 
